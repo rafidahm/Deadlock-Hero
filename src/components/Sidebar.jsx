@@ -8,6 +8,7 @@ import {
   HiOutlineAcademicCap,
   HiOutlineInformationCircle,
   HiOutlineX,
+  HiOutlineEye,
 } from 'react-icons/hi';
 import { GiBreakingChain } from 'react-icons/gi';
 
@@ -16,6 +17,7 @@ const navItems = [
   { to: '/smart-mode', icon: HiOutlineLightningBolt, label: 'Smart Mode' },
   { to: '/quick-mode', icon: HiOutlinePlay, label: 'Quick Mode' },
   { to: '/compare', icon: HiOutlineSwitchHorizontal, label: 'Compare Modes' },
+  { to: '/visual-mode', icon: HiOutlineEye, label: 'Visual Mode' },
   { to: '/learn', icon: HiOutlineAcademicCap, label: 'Learning Center' },
   { to: '/about', icon: HiOutlineInformationCircle, label: 'About' },
 ];
@@ -31,7 +33,6 @@ export default function Sidebar({ onClose }) {
           </div>
           <div>
             <h1 className="text-lg font-bold gradient-text leading-tight">DeadLock Hero</h1>
-            <p className="text-[11px] text-text-muted font-medium tracking-wider uppercase">OS Simulator</p>
           </div>
         </div>
         <button onClick={onClose} className="lg:hidden p-1 rounded-lg hover:bg-primary/20">
@@ -39,9 +40,7 @@ export default function Sidebar({ onClose }) {
         </button>
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 px-4 space-y-1">
-        <p className="text-[10px] uppercase tracking-[0.15em] text-text-muted font-semibold px-3 mb-3">Navigation</p>
         {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}

@@ -7,6 +7,7 @@ import QuickMode from './pages/QuickMode';
 import CompareModes from './pages/CompareModes';
 import LearningCenter from './pages/LearningCenter';
 import About from './pages/About';
+import VisualMode from './pages/VisualMode';
 
 function App() {
   return (
@@ -33,6 +34,7 @@ function App() {
           <Route path="quick-mode" element={<QuickMode />} />
           <Route path="compare" element={<CompareModes />} />
           <Route path="learn" element={<LearningCenter />} />
+          <Route path="visual-mode" element={<VisualMode />} />
           <Route path="about" element={<About />} />
         </Route>
       </Routes>

@@ -44,7 +44,7 @@ export function StatCard({ icon: Icon, label, value, color = 'primary', delay = 
 }
 
 // ─── Badge ──────────────────────────────────────────────────────────────────
-export function Badge({ children, color = 'primary', size = 'md', pulse = false }) {
+export function Badge({ children, color = 'primary', size = 'md', pulse = false, className = '', ...props }) {
   const colors = {
     primary: 'bg-primary/20 text-primary-light border-primary/30',
     success: 'bg-success/20 text-success border-success/30',
@@ -59,7 +59,7 @@ export function Badge({ children, color = 'primary', size = 'md', pulse = false 
   };
 
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border font-medium ${colors[color]} ${sizes[size]} ${pulse ? 'pulse-glow' : ''}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-full border font-medium ${colors[color]} ${sizes[size]} ${pulse ? 'pulse-glow' : ''} ${className}`} {...props}>
       {pulse && <span className={`w-2 h-2 rounded-full bg-current`} />}
       {children}
     </span>
@@ -153,8 +153,9 @@ export function Tooltip({ children, text }) {
 }
 
 // ─── Matrix Input Component ─────────────────────────────────────────────────
-export function MatrixInput({ label, rows, cols, value, onChange, processLabels, resourceLabels }) {
+export function MatrixInput({ label, rows, cols, value, onChange, processLabels, resourceLabels, readOnly = false }) {
   const handleChange = (i, j, val) => {
+    if (readOnly) return;
     const newMatrix = value.map(row => [...row]);
     newMatrix[i][j] = val;
     onChange(newMatrix);
@@ -188,7 +189,12 @@ export function MatrixInput({ label, rows, cols, value, onChange, processLabels,
                       min="0"
                       value={value?.[i]?.[j] ?? ''}
                       onChange={e => handleChange(i, j, e.target.value)}
-                      className="w-14 h-9 text-center text-sm font-mono bg-surface-light/40 border border-border rounded-lg text-text focus:border-primary focus:ring-1 focus:ring-primary/50 outline-none transition-all"
+                      readOnly={readOnly}
+                      className={`w-14 h-9 text-center text-sm font-mono border rounded-lg focus:ring-1 outline-none transition-all ${
+                        readOnly
+                          ? 'bg-surface-light/10 border-border/50 text-text-muted cursor-not-allowed focus:ring-0 focus:border-border/50'
+                          : 'bg-surface-light/40 border-border text-text focus:border-primary focus:ring-primary/50'
+                      }`}
                     />
                   </td>
                 ))}

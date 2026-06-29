@@ -296,7 +296,7 @@ export function runSmartAnalysis({ processes, resources, totalResources, allocat
   let systemState;
   if (bankers.isSafe) {
     systemState = 'SAFE';
-  } else if (conditions.circularWait) {
+  } else if (bankers.steps.length === 0) {
     systemState = 'DEADLOCKED';
   } else {
     systemState = 'UNSAFE';
@@ -313,7 +313,7 @@ export function runSmartAnalysis({ processes, resources, totalResources, allocat
   } else if (systemState === 'UNSAFE') {
     recommendation = {
       action: 'Use Banker\'s Algorithm (Deadlock Avoidance)',
-      detail: 'The system is unsafe — future deadlock is possible. Apply Banker\'s Algorithm to avoid deadlock.',
+      detail: 'The system is unsafe — future deadlock is possible.',
       mode: 'Quick Mode → Tab 1',
     };
   } else {

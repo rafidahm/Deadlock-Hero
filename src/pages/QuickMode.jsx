@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { bankersAlgorithm, calcNeed, calcAvailable } from '../utils/algorithms';
@@ -15,11 +15,24 @@ const emptyMatrix = (r, c) => Array.from({ length: r }, () => Array(c).fill(''))
 
 // ─── Tab 1: Banker's Algorithm ──────────────────────────────────────────────
 function BankersTab() {
-  const [p, setP] = useState(3);
-  const [r, setR] = useState(3);
-  const [avail, setAvail] = useState(['', '', '']);
-  const [alloc, setAlloc] = useState(emptyMatrix(3, 3));
-  const [max, setMax] = useState(emptyMatrix(3, 3));
+  const getTransferData = () => {
+    try {
+      const raw = sessionStorage.getItem('deadlock_hero_transfer');
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data.targetTab === 'avoidance') return data;
+      }
+    } catch {}
+    return null;
+  };
+
+  const transfer = getTransferData();
+
+  const [p, setP] = useState(transfer ? transfer.p : 3);
+  const [r, setR] = useState(transfer ? transfer.r : 3);
+  const [avail, setAvail] = useState(transfer ? transfer.avail : ['', '', '']);
+  const [alloc, setAlloc] = useState(transfer ? transfer.alloc : emptyMatrix(3, 3));
+  const [max, setMax] = useState(transfer ? transfer.max : emptyMatrix(3, 3));
   const [result, setResult] = useState(null);
   const [step, setStep] = useState(-1);
 
@@ -33,17 +46,66 @@ function BankersTab() {
     setResult(null); setStep(-1);
   };
 
-  const loadExample = () => {
-    setP(5); setR(3);
-    setAvail(['3','3','2']);
-    setAlloc([['0','1','0'],['2','0','0'],['3','0','2'],['2','1','1'],['0','0','2']]);
-    setMax([['7','5','3'],['3','2','2'],['9','0','2'],['2','2','2'],['4','3','3']]);
+  const EXAMPLES = [
+    { id: 'b1', label: 'Classic Textbook (5P 3R)', tag: 'Safe', avail: ['3','3','2'], p: 5, r: 3, alloc: [['0','1','0'],['2','0','0'],['3','0','2'],['2','1','1'],['0','0','2']], max: [['7','5','3'],['3','2','2'],['9','0','2'],['2','2','2'],['4','3','3']] },
+    { id: 'b2', label: 'Simple Safe (3P 3R)', tag: 'Safe', avail: ['2','1','2'], p: 3, r: 3, alloc: [['1','0','0'],['0','1','0'],['1','1','1']], max: [['3','2','2'],['2','2','1'],['3','3','3']] },
+    { id: 'b3', label: 'Two Resources (4P 2R)', tag: 'Safe', avail: ['1','1'], p: 4, r: 2, alloc: [['1','0'],['0','1'],['1','1'],['0','0']], max: [['2','1'],['1','2'],['1','1'],['1','1']] },
+    { id: 'b4', label: 'Unsafe — Tight Resources', tag: 'Unsafe', avail: ['0','0','1'], p: 3, r: 3, alloc: [['2','2','1'],['2','1','1'],['1','1','1']], max: [['5','4','3'],['4','3','3'],['3','3','2']] },
+    { id: 'b5', label: 'Unsafe — High Demand', tag: 'Unsafe', avail: ['0','1'], p: 4, r: 2, alloc: [['2','1'],['1','1'],['1','0'],['0','1']], max: [['4','3'],['3','2'],['3','2'],['2','2']] },
+  ];
+  const loadRandomExample = () => {
+    const randomEx = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
+    setP(randomEx.p); setR(randomEx.r);
+    setAvail(randomEx.avail);
+    setAlloc(randomEx.alloc);
+    setMax(randomEx.max);
     setResult(null); setStep(-1);
-    toast.success('Loaded Banker\'s example');
+    toast.success(`Loaded: ${randomEx.label}`);
   };
 
   const run = useCallback(() => {
     try {
+      // 1. Validate Available Resources
+      for (let j = 0; j < r; j++) {
+        const v = avail[j];
+        if (v === '' || v === null || v === undefined) {
+          toast.error(`Available Resource R${j} cannot be empty.`);
+          return;
+        }
+        if (isNaN(v) || Number(v) < 0 || !Number.isInteger(Number(v))) {
+          toast.error(`Available Resource R${j} must be a non-negative integer.`);
+          return;
+        }
+      }
+
+      // 2. Validate Allocation Matrix and Max Matrix
+      for (let i = 0; i < p; i++) {
+        for (let j = 0; j < r; j++) {
+          const a = alloc[i]?.[j];
+          const m = max[i]?.[j];
+          if (a === '' || a === null || a === undefined) {
+            toast.error(`Allocation Matrix cell [P${i}][R${j}] cannot be empty.`);
+            return;
+          }
+          if (isNaN(a) || Number(a) < 0 || !Number.isInteger(Number(a))) {
+            toast.error(`Allocation Matrix cell [P${i}][R${j}] must be a non-negative integer.`);
+            return;
+          }
+          if (m === '' || m === null || m === undefined) {
+            toast.error(`Maximum Matrix cell [P${i}][R${j}] cannot be empty.`);
+            return;
+          }
+          if (isNaN(m) || Number(m) < 0 || !Number.isInteger(Number(m))) {
+            toast.error(`Maximum Matrix cell [P${i}][R${j}] must be a non-negative integer.`);
+            return;
+          }
+          if (Number(a) > Number(m)) {
+            toast.error(`Allocation [P${i}][R${j}] (${a}) cannot exceed Maximum [P${i}][R${j}] (${m}).`);
+            return;
+          }
+        }
+      }
+
       const totalRes = avail.map(Number);
       for (let i = 0; i < p; i++) for (let j = 0; j < r; j++) totalRes[j] += Number(alloc[i][j]);
       const res = bankersAlgorithm(alloc, max, totalRes, p, r);
@@ -60,7 +122,11 @@ function BankersTab() {
       <Card className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-base font-bold text-white">Banker's Algorithm Configuration</h3>
-          <Button variant="ghost" size="sm" onClick={loadExample}>Load Example</Button>
+          <div>
+            <Button variant="ghost" size="sm" onClick={loadRandomExample}>
+              📂 Load Example
+            </Button>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -87,9 +153,12 @@ function BankersTab() {
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className={`grid grid-cols-1 ${result ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-6`}>
           <MatrixInput label="Allocation Matrix" rows={p} cols={r} value={alloc} onChange={setAlloc} />
           <MatrixInput label="Maximum Matrix" rows={p} cols={r} value={max} onChange={setMax} />
+          {result && (
+            <MatrixInput label="Need Matrix (Max - Alloc)" rows={p} cols={r} value={result.need} readOnly />
+          )}
         </div>
         <div className="flex gap-3">
           <Button onClick={run} size="lg"><HiOutlinePlay className="w-5 h-5" /> Run Banker's Algorithm</Button>
@@ -103,10 +172,10 @@ function BankersTab() {
         {result && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
             {/* State Badge */}
-            <Card className={`text-center py-6 ${result.isSafe ? 'glow-success' : 'glow-danger'}`}>
-              {result.isSafe ? <HiOutlineShieldCheck className="w-14 h-14 mx-auto text-success mb-3" /> : <HiOutlineXCircle className="w-14 h-14 mx-auto text-danger mb-3" />}
-              <Badge color={result.isSafe ? 'success' : 'danger'} size="lg" pulse>{result.isSafe ? 'SAFE STATE' : 'UNSAFE STATE'}</Badge>
-              {result.isSafe && (
+            <Card className={`text-center py-6 ${result.isSafe ? 'glow-success' : 'glow-warning'}`}>
+              {result.isSafe ? <HiOutlineShieldCheck className="w-14 h-14 mx-auto text-success mb-3" /> : <HiOutlineXCircle className="w-14 h-14 mx-auto text-warning mb-3" />}
+              <Badge color={result.isSafe ? 'success' : 'warning'} size="lg" pulse>{result.isSafe ? 'SAFE STATE' : 'UNSAFE STATE Detected'}</Badge>
+              {result.isSafe ? (
                 <div className="flex items-center justify-center gap-2 flex-wrap mt-4">
                   <span className="text-sm text-text-muted">Safe Sequence:</span>
                   {result.safeSequence.map((sp, i) => (
@@ -116,30 +185,79 @@ function BankersTab() {
                     </span>
                   ))}
                 </div>
+              ) : (
+                <div className="mt-4 max-w-lg mx-auto space-y-4">
+                  {/* Point of Failure Sequence */}
+                  <div className="p-4 rounded-xl bg-warning/5 border border-warning/20">
+                    <p className="text-xs font-semibold text-warning mb-2 uppercase tracking-wider text-center">Partial Execution Path</p>
+                    <div className="flex items-center justify-center gap-2 flex-wrap mb-4">
+                      {result.safeSequence.map((sp, i) => (
+                        <span key={i} className="flex items-center gap-2">
+                          <Badge color="success" size="md">P{sp}</Badge>
+                          <HiOutlineArrowRight className="w-4 h-4 text-success/60" />
+                        </span>
+                      ))}
+                      <span className="flex items-center gap-1 bg-danger/10 border border-danger/30 px-3 py-1 rounded-lg">
+                        <span className="text-danger font-bold text-sm">🛑 Stuck</span>
+                      </span>
+                    </div>
+
+                    {/* Deficit information */}
+                    <div className="text-left space-y-2 mt-3 bg-surface-light/40 p-3 rounded-lg border border-border/40 font-mono text-xs">
+                      <p className="text-text-muted font-sans font-semibold mb-1">Blocked Processes Resource Deficit:</p>
+                      {(() => {
+                        // Compute final work vector after executing the safe sequence steps
+                        const work = [...result.available];
+                        result.safeSequence.forEach(pIdx => {
+                          const allocRow = result.steps.find(s => s.process === pIdx)?.allocation || [];
+                          allocRow.forEach((val, j) => {
+                            work[j] = (work[j] || 0) + val;
+                          });
+                        });
+
+                        // For each process not in safeSequence, find its deficits
+                        const safeSet = new Set(result.safeSequence);
+                        const blockedList = [];
+                        for (let i = 0; i < p; i++) {
+                          if (!safeSet.has(i)) {
+                            const deficits = [];
+                            for (let j = 0; j < r; j++) {
+                              const reqVal = result.need[i][j];
+                              const availVal = work[j] || 0;
+                              if (reqVal > availVal) {
+                                deficits.push(`R${j} (Need ${reqVal}, Avail ${availVal})`);
+                              }
+                            }
+                            blockedList.push({ process: i, deficits });
+                          }
+                        }
+
+                        return blockedList.map(({ process, deficits }) => (
+                          <div key={process} className="flex items-start gap-1">
+                            <span className="text-danger font-bold">P{process}:</span>
+                            <span className="text-text-muted text-left">
+                              Needs {deficits.join(', ')}
+                            </span>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Educational tip banner */}
+                  <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 text-left flex items-start gap-2.5">
+                    <span className="text-lg">💡</span>
+                    <div>
+                      <p className="text-xs font-bold text-white mb-0.5">Edu Tip: Unsafe State vs Deadlock</p>
+                      <p className="text-xs text-text-muted leading-relaxed">
+                        The system is in an <strong>Unsafe State</strong> but not yet deadlocked. Processes that ran successfully (above) can finish right now. However, if other processes request their maximum needs, a deadlock will eventually become unavoidable.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               )}
             </Card>
 
-            {/* Need Matrix */}
-            <Card>
-              <h4 className="text-sm font-bold text-white mb-3">Need Matrix (Max - Alloc)</h4>
-              <div className="overflow-x-auto">
-                <table className="text-sm">
-                  <thead>
-                    <tr><th className="px-3 py-2 text-text-muted"></th>
-                      {Array.from({length: r}, (_,j) => <th key={j} className="px-3 py-2 text-primary-light font-mono">R{j}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.need.map((row, i) => (
-                      <tr key={i} className="border-t border-border/30">
-                        <td className="px-3 py-2 text-accent font-mono font-semibold">P{i}</td>
-                        {row.map((v, j) => <td key={j} className="px-3 py-2 font-mono text-center">{v}</td>)}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
 
             {/* Step-by-step */}
             {result.isSafe && result.steps.length > 0 && (
@@ -176,11 +294,24 @@ function BankersTab() {
 
 // ─── Tab 2: Detection + Recovery ────────────────────────────────────────────
 function DetectionTab() {
-  const [p, setP] = useState(3);
-  const [r, setR] = useState(2);
-  const [allocData, setAllocData] = useState(emptyMatrix(3, 2));
-  const [requestData, setRequestData] = useState(emptyMatrix(3, 2));
-  const [totalRes, setTotalRes] = useState(['', '']);
+  const getTransferData = () => {
+    try {
+      const raw = sessionStorage.getItem('deadlock_hero_transfer');
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data.targetTab === 'detection') return data;
+      }
+    } catch {}
+    return null;
+  };
+
+  const transfer = getTransferData();
+
+  const [p, setP] = useState(transfer ? transfer.p : 3);
+  const [r, setR] = useState(transfer ? transfer.r : 2);
+  const [allocData, setAllocData] = useState(transfer ? transfer.allocData : emptyMatrix(3, 2));
+  const [requestData, setRequestData] = useState(transfer ? transfer.requestData : emptyMatrix(3, 2));
+  const [totalRes, setTotalRes] = useState(transfer ? transfer.totalRes : ['', '']);
   const [result, setResult] = useState(null);
   const [recovered, setRecovered] = useState(null);
 
@@ -194,17 +325,79 @@ function DetectionTab() {
     setResult(null); setRecovered(null);
   };
 
-  const loadExample = () => {
-    setP(3); setR(2);
-    setTotalRes(['4','4']);
-    setAllocData([['1','1'],['1','1'],['1','1']]);
-    setRequestData([['1','0'],['0','1'],['1','1']]);
+  const EXAMPLES = [
+    // d1: total=[1,1], alloc=[[1,0],[0,1]], avail=[0,0], req=[[0,1],[1,0]] → no process can go → DEADLOCK P0,P1
+    { id: 'd1', label: 'Classic 2-Process Deadlock', tag: 'Deadlock', p: 2, r: 2, total: ['1','1'], alloc: [['1','0'],['0','1']], req: [['0','1'],['1','0']] },
+    // d2: total=[2,2], alloc=[[1,1],[1,0],[0,1]], avail=[0,0], req=[[1,0],[0,1],[1,1]] → none satisfy → ALL DEADLOCK
+    { id: 'd2', label: '3-Process Full Deadlock', tag: 'Deadlock', p: 3, r: 2, total: ['2','2'], alloc: [['1','1'],['1','0'],['0','1']], req: [['1','0'],['0','1'],['1','1']] },
+    // d3: total=[2,2], alloc=[[1,0],[0,1],[0,0],[1,1]], avail=[0,0], P2 req=[0,0]→work=[0,0]; P0=[1,1]NO, P1=[1,0]NO, P3=[0,1]NO → P0,P1,P3 DEADLOCK
+    { id: 'd3', label: 'Partial Deadlock (4P 2R)', tag: 'Deadlock', p: 4, r: 2, total: ['2','2'], alloc: [['1','0'],['0','1'],['0','0'],['1','1']], req: [['1','1'],['1','0'],['0','0'],['0','1']] },
+    // d4: total=[3,3,3], alloc=[[1,0,1],[1,1,0],[0,1,1]], avail=[1,1,1], req=[[0,2,0],[0,0,2],[2,0,0]] → all need 2, only 1 avail → ALL DEADLOCK
+    { id: 'd4', label: 'Full Deadlock (3P 3R)', tag: 'Deadlock', p: 3, r: 3, total: ['3','3','3'], alloc: [['1','0','1'],['1','1','0'],['0','1','1']], req: [['0','2','0'],['0','0','2'],['2','0','0']] },
+    // d5: total=[6,4], alloc=[[2,1],[1,1],[1,0],[1,1]], avail=[1,1], req=[[1,0],[0,1],[1,1],[0,0]] → P3 goes first, then all → NO DEADLOCK
+    { id: 'd5', label: 'No Deadlock — Safe System', tag: 'No DL', p: 4, r: 2, total: ['6','4'], alloc: [['2','1'],['1','1'],['1','0'],['1','1']], req: [['1','0'],['0','1'],['1','1'],['0','0']] },
+  ];
+  const loadRandomExample = () => {
+    const randomEx = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
+    setP(randomEx.p); setR(randomEx.r);
+    setTotalRes(randomEx.total);
+    setAllocData(randomEx.alloc);
+    setRequestData(randomEx.req);
     setResult(null); setRecovered(null);
-    toast.success('Loaded detection example');
+    toast.success(`Loaded: ${randomEx.label}`);
   };
 
   const detect = () => {
     try {
+      // 1. Validate Total Resources
+      for (let j = 0; j < r; j++) {
+        const v = totalRes[j];
+        if (v === '' || v === null || v === undefined) {
+          toast.error(`Total Resource R${j} cannot be empty.`);
+          return;
+        }
+        if (isNaN(v) || Number(v) < 0 || !Number.isInteger(Number(v))) {
+          toast.error(`Total Resource R${j} must be a non-negative integer.`);
+          return;
+        }
+      }
+
+      // 2. Validate Current Allocation and Current Requests
+      for (let i = 0; i < p; i++) {
+        for (let j = 0; j < r; j++) {
+          const a = allocData[i]?.[j];
+          const rq = requestData[i]?.[j];
+          if (a === '' || a === null || a === undefined) {
+            toast.error(`Allocation Matrix cell [P${i}][R${j}] cannot be empty.`);
+            return;
+          }
+          if (isNaN(a) || Number(a) < 0 || !Number.isInteger(Number(a))) {
+            toast.error(`Allocation Matrix cell [P${i}][R${j}] must be a non-negative integer.`);
+            return;
+          }
+          if (rq === '' || rq === null || rq === undefined) {
+            toast.error(`Request Matrix cell [P${i}][R${j}] cannot be empty.`);
+            return;
+          }
+          if (isNaN(rq) || Number(rq) < 0 || !Number.isInteger(Number(rq))) {
+            toast.error(`Request Matrix cell [P${i}][R${j}] must be a non-negative integer.`);
+            return;
+          }
+        }
+      }
+
+      // 3. Validate Total Allocation <= Total Resources
+      for (let j = 0; j < r; j++) {
+        let sumAlloc = 0;
+        for (let i = 0; i < p; i++) {
+          sumAlloc += Number(allocData[i][j]);
+        }
+        if (sumAlloc > Number(totalRes[j])) {
+          toast.error(`Sum of Allocated resources for R${j} (${sumAlloc}) exceeds Total Resources (${totalRes[j]}).`);
+          return;
+        }
+      }
+
       const total = totalRes.map(Number);
       const alloc = allocData.map(row => row.map(Number));
       const req = requestData.map(row => row.map(Number));
@@ -284,7 +477,11 @@ function DetectionTab() {
       <Card className="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-base font-bold text-white">RAG Detection & Recovery</h3>
-          <Button variant="ghost" size="sm" onClick={loadExample}>Load Example</Button>
+          <div>
+            <Button variant="ghost" size="sm" onClick={loadRandomExample}>
+              📂 Load Example
+            </Button>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -323,6 +520,49 @@ function DetectionTab() {
       <AnimatePresence>
         {result && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            {/* Available Resources & Need Matrix */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Available Resources Card */}
+              <Card>
+                <h4 className="text-sm font-bold text-white mb-3">Available Resources</h4>
+                <div className="flex flex-wrap gap-3 py-2">
+                  {result.avail.map((val, idx) => (
+                    <div key={idx} className="flex items-center gap-2 bg-surface-light/40 border border-border px-4 py-2 rounded-xl">
+                      <span className="text-xs text-primary-light font-mono font-semibold">R{idx}</span>
+                      <span className="text-lg font-mono text-white font-bold">{val}</span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              {/* Need Matrix Card */}
+              <Card>
+                <h4 className="text-sm font-bold text-white mb-3">Need Matrix (Current Requests)</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border/30">
+                        <th className="px-3 py-2 text-left text-text-muted">Process</th>
+                        {Array.from({ length: r }, (_, j) => (
+                          <th key={j} className="px-3 py-2 text-center text-primary-light font-mono">R{j}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.req.map((row, i) => (
+                        <tr key={i} className="border-b border-border/10 hover:bg-primary/5 transition-colors">
+                          <td className="px-3 py-2 text-accent font-mono font-semibold">P{i}</td>
+                          {row.map((v, j) => (
+                            <td key={j} className="px-3 py-2 text-center font-mono text-white">{v}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </div>
+
             <Card className={`text-center py-6 ${result.deadlocked.length > 0 ? 'glow-danger' : 'glow-success'}`}>
               <Badge color={result.deadlocked.length > 0 ? 'danger' : 'success'} size="lg" pulse>
                 {result.deadlocked.length > 0 ? 'DEADLOCK DETECTED' : 'NO DEADLOCK'}
@@ -386,7 +626,26 @@ function DetectionTab() {
 
 // ─── Quick Mode Page ────────────────────────────────────────────────────────
 export default function QuickMode() {
-  const [activeTab, setActiveTab] = useState('bankers');
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem('deadlock_hero_transfer');
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data.targetTab === 'detection') return 'detection';
+        if (data.targetTab === 'avoidance') return 'bankers';
+      }
+    } catch {}
+    return 'bankers';
+  });
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem('deadlock_hero_transfer');
+    if (raw) {
+      toast.success('Loaded system configuration from Smart Mode!');
+      sessionStorage.removeItem('deadlock_hero_transfer');
+    }
+  }, []);
+
   const tabs = [
     { id: 'bankers', label: 'Deadlock Avoidance', icon: HiOutlineShieldCheck },
     { id: 'detection', label: 'Detection + Recovery', icon: FaProjectDiagram },

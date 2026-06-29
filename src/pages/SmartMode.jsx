@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useApp } from '../context/AppContext';
@@ -31,6 +32,41 @@ const emptyMatrix = (r, c) => Array.from({ length: r }, () => Array(c).fill(''))
 
 export default function SmartMode() {
   const { addAnalysis } = useApp();
+  const navigate = useNavigate();
+
+  const handleNavigate = () => {
+    if (!result) return;
+    
+    // Compute initial available resources (Total - Sum(Alloc))
+    const initialAvail = totalResources.map((total, j) => {
+      let sumAlloc = 0;
+      for (let i = 0; i < processes; i++) {
+        sumAlloc += Number(allocation[i][j]);
+      }
+      return String(Number(total) - sumAlloc);
+    });
+
+    // Need matrix (Max - Alloc)
+    const needMatrix = allocation.map((row, i) =>
+      row.map((val, j) => String(Number(maximum[i][j]) - Number(val)))
+    );
+
+    // Save to sessionStorage
+    sessionStorage.setItem('deadlock_hero_transfer', JSON.stringify({
+      targetTab: result.systemState === 'DEADLOCKED' ? 'detection' : 'avoidance',
+      p: processes,
+      r: resources,
+      avail: initialAvail,
+      alloc: allocation,
+      max: maximum,
+      totalRes: totalResources,
+      allocData: allocation,
+      requestData: needMatrix,
+    }));
+
+    navigate('/quick-mode');
+  };
+
   const [processes, setProcesses] = useState(3);
   const [resources, setResources] = useState(3);
   const [totalResources, setTotalResources] = useState(['', '', '']);
@@ -65,27 +101,46 @@ export default function SmartMode() {
     });
   };
 
-  // Load example
-  const loadExample = (type) => {
-    if (type === 'safe') {
-      setProcesses(3); setResources(3);
-      setTotalResources(['10', '5', '7']);
-      setAllocation([['0','1','0'],['2','0','0'],['3','0','2']]);
-      setMaximum([['7','5','3'],['3','2','2'],['9','0','2']]);
-    } else if (type === 'unsafe') {
-      setProcesses(3); setResources(3);
-      setTotalResources(['6', '5', '4']);
-      setAllocation([['2','2','1'],['2','1','1'],['1','1','1']]);
-      setMaximum([['5','4','3'],['4','3','3'],['3','3','2']]);
-    } else {
-      setProcesses(3); setResources(3);
-      setTotalResources(['3', '3', '2']);
-      setAllocation([['1','1','0'],['1','0','1'],['0','1','1']]);
-      setMaximum([['2','2','1'],['2','1','2'],['1','2','2']]);
-    }
-    setResult(null);
-    setErrors([]);
-    toast.success(`Loaded ${type} example`);
+  const EXAMPLES = [
+    {
+      group: '✅ Safe State',
+      items: [
+        { id: 'safe1', label: 'Classic Banker (OS Textbook)', tag: 'Safe', p: 5, r: 3, total: ['10','5','7'], alloc: [['0','1','0'],['2','0','0'],['3','0','2'],['2','1','1'],['0','0','2']], max: [['7','5','3'],['3','2','2'],['9','0','2'],['2','2','2'],['4','3','3']] },
+        { id: 'safe2', label: 'Small Safe — 3 Processes', tag: 'Safe', p: 3, r: 3, total: ['9','3','6'], alloc: [['2','1','2'],['1','0','1'],['1','1','0']], max: [['5','3','4'],['3','1','3'],['3','2','2']] },
+        { id: 'safe3', label: 'Plenty of Resources', tag: 'Safe', p: 4, r: 2, total: ['10','10'], alloc: [['1','1'],['2','1'],['1','2'],['1','1']], max: [['4','3'],['5','4'],['3','3'],['4','3']] },
+      ],
+    },
+    {
+      group: '⚠️ Unsafe State',
+      items: [
+        { id: 'unsafe1', label: 'Near Deadlock — Resources Tight', tag: 'Unsafe', p: 3, r: 3, total: ['10','5','8'], alloc: [['1','2','1'],['2','0','2'],['2','2','1']], max: [['2','2','2'],['4','3','3'],['9','6','6']] },
+        { id: 'unsafe2', label: 'High Demand, Low Supply', tag: 'Unsafe', p: 3, r: 2, total: ['5','5'], alloc: [['1','2'],['2','1'],['1','1']], max: [['2','2'],['4','4'],['6','6']] },
+        { id: 'unsafe3', label: 'Over-committed System', tag: 'Unsafe', p: 3, r: 1, total: ['4'], alloc: [['1'],['2'],['0']], max: [['2'],['5'],['1']] },
+        { id: 'unsafe4', label: 'Unsatisfiable Demands (4P 3R)', tag: 'Unsafe', p: 4, r: 3, total: ['9','3','6'], alloc: [['2','1','2'],['1','1','1'],['4','0','1'],['1','0','0']], max: [['3','1','2'],['3','2','2'],['10','5','5'],['2','1','1']] },
+        { id: 'unsafe5', label: 'Tight Allocation Limit (4P 2R)', tag: 'Unsafe', p: 4, r: 2, total: ['6','6'], alloc: [['1','2'],['2','1'],['1','1'],['1','1']], max: [['2','2'],['3','3'],['7','7'],['2','2']] },
+      ],
+    },
+    {
+      group: '🔴 Deadlocked',
+      items: [
+        { id: 'dl1', label: 'Circular Wait — 3 Processes', tag: 'Deadlock', p: 3, r: 3, total: ['3','3','2'], alloc: [['1','1','0'],['1','0','1'],['0','1','1']], max: [['2','2','1'],['2','1','2'],['1','2','2']] },
+        { id: 'dl2', label: 'Full Lock — No Progress', tag: 'Deadlock', p: 3, r: 2, total: ['2','2'], alloc: [['1','0'],['0','1'],['1','1']], max: [['2','0'],['0','2'],['1','2']] },
+        { id: 'dl3', label: 'Large Deadlock — 5 Processes', tag: 'Deadlock', p: 5, r: 3, total: ['4','3','4'], alloc: [['1','1','0'],['0','1','1'],['1','0','1'],['1','1','0'],['0','0','1']], max: [['2','2','1'],['1','2','2'],['2','1','2'],['2','2','1'],['1','1','2']] },
+      ],
+    },
+  ];
+
+  const TAG_COLOR = { Safe: 'text-success bg-success/10 border-success/30', Unsafe: 'text-warning bg-warning/10 border-warning/30', Deadlock: 'text-danger bg-danger/10 border-danger/30' };
+
+  const loadRandomExample = () => {
+    const allItems = EXAMPLES.flatMap(group => group.items);
+    const randomEx = allItems[Math.floor(Math.random() * allItems.length)];
+    setProcesses(randomEx.p); setResources(randomEx.r);
+    setTotalResources(randomEx.total);
+    setAllocation(randomEx.alloc);
+    setMaximum(randomEx.max);
+    setResult(null); setErrors([]);
+    toast.success(`Loaded: ${randomEx.label}`);
   };
 
   // Run analysis
@@ -134,10 +189,10 @@ export default function SmartMode() {
       <Card className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <h3 className="text-lg font-bold text-white">System Configuration</h3>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" size="sm" onClick={() => loadExample('safe')}>Load Safe Example</Button>
-            <Button variant="ghost" size="sm" onClick={() => loadExample('unsafe')}>Load Unsafe Example</Button>
-            <Button variant="ghost" size="sm" onClick={() => loadExample('deadlock')}>Load Deadlock Example</Button>
+          <div>
+            <Button variant="ghost" size="sm" onClick={loadRandomExample}>
+              📂 Load Example
+            </Button>
           </div>
         </div>
 
@@ -222,14 +277,21 @@ export default function SmartMode() {
 
       {/* ─── Results ───────────────────────────────────────────── */}
       <AnimatePresence>
-        {result && <SmartResults result={result} processes={processes} resources={resources} />}
+        {result && (
+          <SmartResults
+            result={result}
+            processes={processes}
+            resources={resources}
+            handleNavigate={handleNavigate}
+          />
+        )}
       </AnimatePresence>
     </div>
   );
 }
 
 // ─── Results Component ──────────────────────────────────────────────────────
-function SmartResults({ result, processes, resources }) {
+function SmartResults({ result, processes, resources, handleNavigate }) {
   const stateConfig = {
     SAFE: { color: 'success', icon: HiOutlineShieldCheck, label: 'SAFE', glow: 'glow-success' },
     UNSAFE: { color: 'warning', icon: HiOutlineExclamation, label: 'UNSAFE', glow: 'glow-warning' },
@@ -297,6 +359,49 @@ function SmartResults({ result, processes, resources }) {
       transition={{ duration: 0.6 }}
       className="space-y-6"
     >
+      {/* Available Resources & Need Matrix */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Available Resources Card */}
+        <Card>
+          <h4 className="text-sm font-bold text-white mb-3">Available Resources</h4>
+          <div className="flex flex-wrap gap-3 py-2">
+            {result.bankers.available.map((val, idx) => (
+              <div key={idx} className="flex items-center gap-2 bg-surface-light/40 border border-border px-4 py-2 rounded-xl">
+                <span className="text-xs text-primary-light font-mono font-semibold">R{idx}</span>
+                <span className="text-lg font-mono text-white font-bold">{val}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* Need Matrix Card */}
+        <Card>
+          <h4 className="text-sm font-bold text-white mb-3">Need Matrix (Max - Allocation)</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border/30">
+                  <th className="px-3 py-2 text-left text-text-muted">Process</th>
+                  {Array.from({ length: resources }, (_, j) => (
+                    <th key={j} className="px-3 py-2 text-center text-primary-light font-mono">R{j}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {result.bankers.need.map((row, i) => (
+                  <tr key={i} className="border-b border-border/10 hover:bg-primary/5 transition-colors">
+                    <td className="px-3 py-2 text-accent font-mono font-semibold">P{i}</td>
+                    {row.map((v, j) => (
+                      <td key={j} className="px-3 py-2 text-center font-mono text-white">{v}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+
       {/* System State Banner */}
       <Card className={`${sc.glow} text-center py-8`}>
         <motion.div
@@ -446,34 +551,6 @@ function SmartResults({ result, processes, resources }) {
         </Card>
       </div>
 
-      {/* Safe Sequence */}
-      <div>
-        <SectionTitle icon={HiOutlineShieldCheck} title="Safe Sequence Check" delay={0.5} />
-        <Card delay={0.6} className="text-center py-6">
-          {result.bankers.isSafe ? (
-            <>
-              <HiOutlineCheckCircle className="w-12 h-12 mx-auto text-success mb-3" />
-              <p className="text-sm text-text-muted mb-3">Safe Sequence Found</p>
-              <div className="flex items-center justify-center gap-2 flex-wrap">
-                {result.bankers.safeSequence.map((p, i) => (
-                  <span key={i} className="flex items-center gap-2">
-                    <Badge color="success" size="md">P{p}</Badge>
-                    {i < result.bankers.safeSequence.length - 1 && (
-                      <HiOutlineArrowRight className="w-4 h-4 text-success/60" />
-                    )}
-                  </span>
-                ))}
-              </div>
-            </>
-          ) : (
-            <>
-              <HiOutlineXCircle className="w-12 h-12 mx-auto text-danger mb-3" />
-              <p className="text-sm text-text-muted">No Safe Sequence Found</p>
-            </>
-          )}
-        </Card>
-      </div>
-
       {/* Recommendation */}
       <div>
         <SectionTitle icon={HiOutlineLightningBolt} title="Recommendation" delay={0.6} />
@@ -486,7 +563,14 @@ function SmartResults({ result, processes, resources }) {
               <h4 className="text-base font-bold text-white mb-1">{result.recommendation.action}</h4>
               <p className="text-sm text-text-muted mb-2">{result.recommendation.detail}</p>
               {result.recommendation.mode && (
-                <Badge color={sc.color} size="sm">Go to → {result.recommendation.mode}</Badge>
+                <Badge
+                  color={sc.color}
+                  size="sm"
+                  className="cursor-pointer hover:opacity-80 active:scale-95 transition duration-150 select-none"
+                  onClick={handleNavigate}
+                >
+                  Go to → {result.recommendation.mode}
+                </Badge>
               )}
             </div>
           </div>

@@ -1,16 +1,28 @@
+// useState/useCallback/useEffect — core React hooks for state, memoization, and side-effects
 import { useState, useCallback, useEffect } from 'react';
+// motion/AnimatePresence — smooth enter/exit animations between tab content and result panels
 import { motion, AnimatePresence } from 'framer-motion';
+// toast — shows brief popup notification messages for success or error feedback
 import toast from 'react-hot-toast';
+// Algorithm functions: Banker's safety check, Need matrix calculator, Available vector calculator
 import { bankersAlgorithm, calcNeed, calcAvailable } from '../utils/algorithms';
+// Shared design system UI components used across the form and result panels
 import { Card, Badge, Button, MatrixInput, SectionTitle, Tabs } from '../components/ui';
+// Icons for buttons and result state indicators
 import {
-  HiOutlinePlay, HiOutlineShieldCheck, HiOutlineXCircle, HiOutlineCheckCircle,
-  HiOutlineRefresh, HiOutlineArrowRight, HiOutlineTrash,
+  HiOutlinePlay,         // Play icon for Run buttons
+  HiOutlineShieldCheck,  // Shield for Safe state badge and Avoidance tab label
+  HiOutlineXCircle,      // X circle for Unsafe state badge
+  HiOutlineCheckCircle,  // Check circle for recovery success message
+  HiOutlineRefresh,      // Refresh icon for Reset buttons
+  HiOutlineArrowRight,   // Arrow for safe sequence display
+  HiOutlineTrash,        // Trash icon for Terminate process recovery button
 } from 'react-icons/hi';
-import { FaProjectDiagram } from 'react-icons/fa';
-import { ReactFlow, Background, Controls, MarkerType } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
+import { FaProjectDiagram } from 'react-icons/fa'; // Diagram icon for Detection tab label
+import { ReactFlow, Background, Controls, MarkerType } from '@xyflow/react'; // Graph canvas components
+import '@xyflow/react/dist/style.css'; // Required base styles for React Flow canvas
 
+// Helper: creates a 2D array pre-filled with empty strings (used for blank matrix inputs)
 const emptyMatrix = (r, c) => Array.from({ length: r }, () => Array(c).fill(''));
 
 // ─── Tab 1: Banker's Algorithm ──────────────────────────────────────────────
@@ -22,7 +34,7 @@ function BankersTab() {
         const data = JSON.parse(raw);
         if (data.targetTab === 'avoidance') return data;
       }
-    } catch {}
+    } catch { }
     return null;
   };
 
@@ -41,17 +53,17 @@ function BankersTab() {
     nr = Math.max(1, Math.min(10, Number(nr) || 1));
     setP(np); setR(nr);
     setAvail(prev => { const a = Array(nr).fill(''); for (let i = 0; i < Math.min(prev.length, nr); i++) a[i] = prev[i]; return a; });
-    setAlloc(prev => { const m = emptyMatrix(np, nr); for (let i = 0; i < Math.min(prev.length, np); i++) for (let j = 0; j < Math.min(prev[0]?.length||0, nr); j++) m[i][j] = prev[i]?.[j]??''; return m; });
-    setMax(prev => { const m = emptyMatrix(np, nr); for (let i = 0; i < Math.min(prev.length, np); i++) for (let j = 0; j < Math.min(prev[0]?.length||0, nr); j++) m[i][j] = prev[i]?.[j]??''; return m; });
+    setAlloc(prev => { const m = emptyMatrix(np, nr); for (let i = 0; i < Math.min(prev.length, np); i++) for (let j = 0; j < Math.min(prev[0]?.length || 0, nr); j++) m[i][j] = prev[i]?.[j] ?? ''; return m; });
+    setMax(prev => { const m = emptyMatrix(np, nr); for (let i = 0; i < Math.min(prev.length, np); i++) for (let j = 0; j < Math.min(prev[0]?.length || 0, nr); j++) m[i][j] = prev[i]?.[j] ?? ''; return m; });
     setResult(null); setStep(-1);
   };
 
   const EXAMPLES = [
-    { id: 'b1', label: 'Classic Textbook (5P 3R)', tag: 'Safe', avail: ['3','3','2'], p: 5, r: 3, alloc: [['0','1','0'],['2','0','0'],['3','0','2'],['2','1','1'],['0','0','2']], max: [['7','5','3'],['3','2','2'],['9','0','2'],['2','2','2'],['4','3','3']] },
-    { id: 'b2', label: 'Simple Safe (3P 3R)', tag: 'Safe', avail: ['2','1','2'], p: 3, r: 3, alloc: [['1','0','0'],['0','1','0'],['1','1','1']], max: [['3','2','2'],['2','2','1'],['3','3','3']] },
-    { id: 'b3', label: 'Two Resources (4P 2R)', tag: 'Safe', avail: ['1','1'], p: 4, r: 2, alloc: [['1','0'],['0','1'],['1','1'],['0','0']], max: [['2','1'],['1','2'],['1','1'],['1','1']] },
-    { id: 'b4', label: 'Unsafe — Tight Resources', tag: 'Unsafe', avail: ['0','0','1'], p: 3, r: 3, alloc: [['2','2','1'],['2','1','1'],['1','1','1']], max: [['5','4','3'],['4','3','3'],['3','3','2']] },
-    { id: 'b5', label: 'Unsafe — High Demand', tag: 'Unsafe', avail: ['0','1'], p: 4, r: 2, alloc: [['2','1'],['1','1'],['1','0'],['0','1']], max: [['4','3'],['3','2'],['3','2'],['2','2']] },
+    { id: 'b1', label: 'Classic Textbook (5P 3R)', tag: 'Safe', avail: ['3', '3', '2'], p: 5, r: 3, alloc: [['0', '1', '0'], ['2', '0', '0'], ['3', '0', '2'], ['2', '1', '1'], ['0', '0', '2']], max: [['7', '5', '3'], ['3', '2', '2'], ['9', '0', '2'], ['2', '2', '2'], ['4', '3', '3']] },
+    { id: 'b2', label: 'Simple Safe (3P 3R)', tag: 'Safe', avail: ['2', '1', '2'], p: 3, r: 3, alloc: [['1', '0', '0'], ['0', '1', '0'], ['1', '1', '1']], max: [['3', '2', '2'], ['2', '2', '1'], ['3', '3', '3']] },
+    { id: 'b3', label: 'Two Resources (4P 2R)', tag: 'Safe', avail: ['1', '1'], p: 4, r: 2, alloc: [['1', '0'], ['0', '1'], ['1', '1'], ['0', '0']], max: [['2', '1'], ['1', '2'], ['1', '1'], ['1', '1']] },
+    { id: 'b4', label: 'Unsafe — Tight Resources', tag: 'Unsafe', avail: ['0', '0', '1'], p: 3, r: 3, alloc: [['2', '2', '1'], ['2', '1', '1'], ['1', '1', '1']], max: [['5', '4', '3'], ['4', '3', '3'], ['3', '3', '2']] },
+    { id: 'b5', label: 'Unsafe — High Demand', tag: 'Unsafe', avail: ['0', '1'], p: 4, r: 2, alloc: [['2', '1'], ['1', '1'], ['1', '0'], ['0', '1']], max: [['4', '3'], ['3', '2'], ['3', '2'], ['2', '2']] },
   ];
   const loadRandomExample = () => {
     const randomEx = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
@@ -109,7 +121,7 @@ function BankersTab() {
       const totalRes = avail.map(Number);
       for (let i = 0; i < p; i++) for (let j = 0; j < r; j++) totalRes[j] += Number(alloc[i][j]);
       const res = bankersAlgorithm(alloc, max, totalRes, p, r);
-      setResult({ ...res, need: calcNeed(alloc.map(row=>row.map(Number)), max.map(row=>row.map(Number)), p, r) });
+      setResult({ ...res, need: calcNeed(alloc.map(row => row.map(Number)), max.map(row => row.map(Number)), p, r) });
       setStep(-1);
       toast.success(res.isSafe ? '✅ Safe State Found' : '⚠️ Unsafe State');
     } catch (e) {
@@ -147,7 +159,7 @@ function BankersTab() {
               <div key={j} className="flex flex-col items-center gap-1">
                 <span className="text-xs text-primary-light font-mono">R{j}</span>
                 <input type="number" min="0" value={v}
-                  onChange={e => { const a=[...avail]; a[j]=e.target.value; setAvail(a); }}
+                  onChange={e => { const a = [...avail]; a[j] = e.target.value; setAvail(a); }}
                   className="w-16 h-9 text-center text-sm font-mono bg-surface-light/40 border border-border rounded-lg text-text focus:border-primary outline-none" />
               </div>
             ))}
@@ -162,7 +174,7 @@ function BankersTab() {
         </div>
         <div className="flex gap-3">
           <Button onClick={run} size="lg"><HiOutlinePlay className="w-5 h-5" /> Run Banker's Algorithm</Button>
-          <Button variant="secondary" size="lg" onClick={() => { setResult(null); setStep(-1); setAvail(Array(r).fill('')); setAlloc(emptyMatrix(p,r)); setMax(emptyMatrix(p,r)); }}>
+          <Button variant="secondary" size="lg" onClick={() => { setResult(null); setStep(-1); setAvail(Array(r).fill('')); setAlloc(emptyMatrix(p, r)); setMax(emptyMatrix(p, r)); }}>
             <HiOutlineRefresh className="w-5 h-5" /> Reset
           </Button>
         </div>
@@ -301,7 +313,7 @@ function DetectionTab() {
         const data = JSON.parse(raw);
         if (data.targetTab === 'detection') return data;
       }
-    } catch {}
+    } catch { }
     return null;
   };
 
@@ -316,26 +328,26 @@ function DetectionTab() {
   const [recovered, setRecovered] = useState(null);
 
   const updateDims = (np, nr) => {
-    np = Math.max(1, Math.min(10, Number(np)||1));
-    nr = Math.max(1, Math.min(10, Number(nr)||1));
+    np = Math.max(1, Math.min(10, Number(np) || 1));
+    nr = Math.max(1, Math.min(10, Number(nr) || 1));
     setP(np); setR(nr);
     setTotalRes(prev => { const a = Array(nr).fill(''); for (let i = 0; i < Math.min(prev.length, nr); i++) a[i] = prev[i]; return a; });
-    setAllocData(prev => { const m = emptyMatrix(np,nr); for(let i=0;i<Math.min(prev.length,np);i++) for(let j=0;j<Math.min(prev[0]?.length||0,nr);j++) m[i][j]=prev[i]?.[j]??''; return m; });
-    setRequestData(prev => { const m = emptyMatrix(np,nr); for(let i=0;i<Math.min(prev.length,np);i++) for(let j=0;j<Math.min(prev[0]?.length||0,nr);j++) m[i][j]=prev[i]?.[j]??''; return m; });
+    setAllocData(prev => { const m = emptyMatrix(np, nr); for (let i = 0; i < Math.min(prev.length, np); i++) for (let j = 0; j < Math.min(prev[0]?.length || 0, nr); j++) m[i][j] = prev[i]?.[j] ?? ''; return m; });
+    setRequestData(prev => { const m = emptyMatrix(np, nr); for (let i = 0; i < Math.min(prev.length, np); i++) for (let j = 0; j < Math.min(prev[0]?.length || 0, nr); j++) m[i][j] = prev[i]?.[j] ?? ''; return m; });
     setResult(null); setRecovered(null);
   };
 
   const EXAMPLES = [
     // d1: total=[1,1], alloc=[[1,0],[0,1]], avail=[0,0], req=[[0,1],[1,0]] → no process can go → DEADLOCK P0,P1
-    { id: 'd1', label: 'Classic 2-Process Deadlock', tag: 'Deadlock', p: 2, r: 2, total: ['1','1'], alloc: [['1','0'],['0','1']], req: [['0','1'],['1','0']] },
+    { id: 'd1', label: 'Classic 2-Process Deadlock', tag: 'Deadlock', p: 2, r: 2, total: ['1', '1'], alloc: [['1', '0'], ['0', '1']], req: [['0', '1'], ['1', '0']] },
     // d2: total=[2,2], alloc=[[1,1],[1,0],[0,1]], avail=[0,0], req=[[1,0],[0,1],[1,1]] → none satisfy → ALL DEADLOCK
-    { id: 'd2', label: '3-Process Full Deadlock', tag: 'Deadlock', p: 3, r: 2, total: ['2','2'], alloc: [['1','1'],['1','0'],['0','1']], req: [['1','0'],['0','1'],['1','1']] },
+    { id: 'd2', label: '3-Process Full Deadlock', tag: 'Deadlock', p: 3, r: 2, total: ['2', '2'], alloc: [['1', '1'], ['1', '0'], ['0', '1']], req: [['1', '0'], ['0', '1'], ['1', '1']] },
     // d3: total=[2,2], alloc=[[1,0],[0,1],[0,0],[1,1]], avail=[0,0], P2 req=[0,0]→work=[0,0]; P0=[1,1]NO, P1=[1,0]NO, P3=[0,1]NO → P0,P1,P3 DEADLOCK
-    { id: 'd3', label: 'Partial Deadlock (4P 2R)', tag: 'Deadlock', p: 4, r: 2, total: ['2','2'], alloc: [['1','0'],['0','1'],['0','0'],['1','1']], req: [['1','1'],['1','0'],['0','0'],['0','1']] },
+    { id: 'd3', label: 'Partial Deadlock (4P 2R)', tag: 'Deadlock', p: 4, r: 2, total: ['2', '2'], alloc: [['1', '0'], ['0', '1'], ['0', '0'], ['1', '1']], req: [['1', '1'], ['1', '0'], ['0', '0'], ['0', '1']] },
     // d4: total=[3,3,3], alloc=[[1,0,1],[1,1,0],[0,1,1]], avail=[1,1,1], req=[[0,2,0],[0,0,2],[2,0,0]] → all need 2, only 1 avail → ALL DEADLOCK
-    { id: 'd4', label: 'Full Deadlock (3P 3R)', tag: 'Deadlock', p: 3, r: 3, total: ['3','3','3'], alloc: [['1','0','1'],['1','1','0'],['0','1','1']], req: [['0','2','0'],['0','0','2'],['2','0','0']] },
+    { id: 'd4', label: 'Full Deadlock (3P 3R)', tag: 'Deadlock', p: 3, r: 3, total: ['3', '3', '3'], alloc: [['1', '0', '1'], ['1', '1', '0'], ['0', '1', '1']], req: [['0', '2', '0'], ['0', '0', '2'], ['2', '0', '0']] },
     // d5: total=[6,4], alloc=[[2,1],[1,1],[1,0],[1,1]], avail=[1,1], req=[[1,0],[0,1],[1,1],[0,0]] → P3 goes first, then all → NO DEADLOCK
-    { id: 'd5', label: 'No Deadlock — Safe System', tag: 'No DL', p: 4, r: 2, total: ['6','4'], alloc: [['2','1'],['1','1'],['1','0'],['1','1']], req: [['1','0'],['0','1'],['1','1'],['0','0']] },
+    { id: 'd5', label: 'No Deadlock — Safe System', tag: 'No DL', p: 4, r: 2, total: ['6', '4'], alloc: [['2', '1'], ['1', '1'], ['1', '0'], ['1', '1']], req: [['1', '0'], ['0', '1'], ['1', '1'], ['0', '0']] },
   ];
   const loadRandomExample = () => {
     const randomEx = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
@@ -501,7 +513,7 @@ function DetectionTab() {
             {totalRes.map((v, j) => (
               <div key={j} className="flex flex-col items-center gap-1">
                 <span className="text-xs text-primary-light font-mono">R{j}</span>
-                <input type="number" min="0" value={v} onChange={e => { const a=[...totalRes]; a[j]=e.target.value; setTotalRes(a); }}
+                <input type="number" min="0" value={v} onChange={e => { const a = [...totalRes]; a[j] = e.target.value; setTotalRes(a); }}
                   className="w-16 h-9 text-center text-sm font-mono bg-surface-light/40 border border-border rounded-lg text-text focus:border-primary outline-none" />
               </div>
             ))}
@@ -624,42 +636,49 @@ function DetectionTab() {
   );
 }
 
-// ─── Quick Mode Page ────────────────────────────────────────────────────────
+// ─── Quick Mode Page (Root Component) ────────────────────────────────────────
+// Renders the tab selector and conditionally mounts BankersTab or DetectionTab
 export default function QuickMode() {
+  // Initialize activeTab synchronously from sessionStorage transfer data
+  // This ensures the correct tab opens immediately without a flicker on mount
   const [activeTab, setActiveTab] = useState(() => {
     try {
       const raw = sessionStorage.getItem('deadlock_hero_transfer');
       if (raw) {
         const data = JSON.parse(raw);
-        if (data.targetTab === 'detection') return 'detection';
-        if (data.targetTab === 'avoidance') return 'bankers';
+        if (data.targetTab === 'detection') return 'detection'; // Open Detection tab for deadlocked systems
+        if (data.targetTab === 'avoidance') return 'bankers';   // Open Banker's tab for unsafe systems
       }
-    } catch {}
-    return 'bankers';
+    } catch {} // Silently ignore any JSON parse errors
+    return 'bankers'; // Default to Banker's Algorithm tab
   });
 
+  // On first mount: show a success toast if data was transferred, then clear sessionStorage
   useEffect(() => {
     const raw = sessionStorage.getItem('deadlock_hero_transfer');
     if (raw) {
-      toast.success('Loaded system configuration from Smart Mode!');
-      sessionStorage.removeItem('deadlock_hero_transfer');
+      toast.success('Loaded system configuration from Smart Mode!'); // Confirm transfer to user
+      sessionStorage.removeItem('deadlock_hero_transfer'); // Delete key so it doesn't re-apply on refresh
     }
-  }, []);
+  }, []); // Empty dependency array = runs only once on mount
 
+  // Tab configuration array passed to the shared Tabs component
   const tabs = [
-    { id: 'bankers', label: 'Deadlock Avoidance', icon: HiOutlineShieldCheck },
-    { id: 'detection', label: 'Detection + Recovery', icon: FaProjectDiagram },
+    { id: 'bankers', label: 'Deadlock Avoidance', icon: HiOutlineShieldCheck }, // Tab 1: Banker's
+    { id: 'detection', label: 'Detection + Recovery', icon: FaProjectDiagram }, // Tab 2: RAG
   ];
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-7xl mx-auto"> {/* Max width container with vertical spacing */}
       <SectionTitle icon={HiOutlinePlay} title="Quick Mode" subtitle="Directly execute deadlock algorithms without smart analysis" />
-      <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-      <AnimatePresence mode="wait">
+      <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} /> {/* Tab selector bar */}
+      <AnimatePresence mode="wait"> {/* wait = exit animation finishes before next tab enters */}
         <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+          {/* Conditionally render the active tab component based on selected tab */}
           {activeTab === 'bankers' ? <BankersTab /> : <DetectionTab />}
         </motion.div>
       </AnimatePresence>
     </div>
   );
 }
+

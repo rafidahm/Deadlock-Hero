@@ -1,98 +1,114 @@
+// useState for local state management, useCallback to memoize the analyze function
 import { useState, useCallback } from 'react';
+// useNavigate allows programmatic navigation to Quick Mode
 import { useNavigate } from 'react-router-dom';
+// motion for animations, AnimatePresence for enter/exit transitions
 import { motion, AnimatePresence } from 'framer-motion';
+// toast shows popup notifications (success/error messages)
 import toast from 'react-hot-toast';
+// useApp accesses the global context to record analysis history and stats
 import { useApp } from '../context/AppContext';
+// runSmartAnalysis is the master algorithm that runs all checks at once
 import { runSmartAnalysis } from '../utils/algorithms';
+// Shared UI design system components
 import { Card, Badge, Button, MatrixInput, SectionTitle, ProgressBar, Tooltip } from '../components/ui';
+// Icons for section headers, state badges, and condition cards
 import {
-  HiOutlineLightningBolt,
-  HiOutlineShieldCheck,
-  HiOutlineExclamation,
-  HiOutlineBan,
-  HiOutlineInformationCircle,
-  HiOutlineCheckCircle,
-  HiOutlineXCircle,
-  HiOutlineRefresh,
-  HiOutlineChartBar,
-  HiOutlineClock,
-  HiOutlineArrowRight,
+  HiOutlineLightningBolt,   // Lightning bolt for Smart Mode header and Analyze button
+  HiOutlineShieldCheck,     // Shield for SAFE state banner
+  HiOutlineExclamation,     // Exclamation for UNSAFE state banner
+  HiOutlineBan,             // Ban icon for DEADLOCKED state banner
+  HiOutlineInformationCircle, // Info icon for Conditions section header
+  HiOutlineCheckCircle,     // Check circle (unused but available)
+  HiOutlineXCircle,         // X circle for validation error header
+  HiOutlineRefresh,         // Refresh icon for Reset button
+  HiOutlineChartBar,        // Bar chart icon for Utilization section
+  HiOutlineClock,           // Clock icon for Waiting Dependencies section
+  HiOutlineArrowRight,      // Arrow for cycle sequence display
 } from 'react-icons/hi';
+// FontAwesome icons representing each Coffman deadlock condition
 import { FaLock, FaHandPaper, FaBan, FaSyncAlt, FaProjectDiagram } from 'react-icons/fa';
+// Recharts components for the resource utilization bar chart
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell, Tooltip as RTooltip,
 } from 'recharts';
+// React Flow components for the Wait-For Graph visualization
 import {
   ReactFlow, Background, Controls, MarkerType,
 } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
+import '@xyflow/react/dist/style.css'; // Required CSS for React Flow canvas styling
 
-// ─── Helper: create empty matrix ────────────────────────────────────────────
+// Helper: creates a 2D array of empty strings with r rows and c columns
 const emptyMatrix = (r, c) => Array.from({ length: r }, () => Array(c).fill(''));
 
 export default function SmartMode() {
-  const { addAnalysis } = useApp();
-  const navigate = useNavigate();
+  const { addAnalysis } = useApp(); // Pull addAnalysis to record each run to global history
+  const navigate = useNavigate();  // Used to redirect user to Quick Mode page
 
+  // Triggered when user clicks the recommendation badge — transfers data and navigates to Quick Mode
   const handleNavigate = () => {
-    if (!result) return;
+    if (!result) return; // Guard: do nothing if analysis hasn't run yet
     
-    // Compute initial available resources (Total - Sum(Alloc))
+    // Compute available resources: Available[j] = Total[j] - Sum of all Allocation[i][j]
     const initialAvail = totalResources.map((total, j) => {
       let sumAlloc = 0;
       for (let i = 0; i < processes; i++) {
-        sumAlloc += Number(allocation[i][j]);
+        sumAlloc += Number(allocation[i][j]); // Accumulate all process allocations for resource j
       }
-      return String(Number(total) - sumAlloc);
+      return String(Number(total) - sumAlloc); // Return as string for matrix input compatibility
     });
 
-    // Need matrix (Max - Alloc)
+    // Compute Need matrix: Need[i][j] = Maximum[i][j] - Allocation[i][j]
     const needMatrix = allocation.map((row, i) =>
       row.map((val, j) => String(Number(maximum[i][j]) - Number(val)))
     );
 
-    // Save to sessionStorage
+    // Serialize full system state into sessionStorage for Quick Mode to read on mount
     sessionStorage.setItem('deadlock_hero_transfer', JSON.stringify({
-      targetTab: result.systemState === 'DEADLOCKED' ? 'detection' : 'avoidance',
-      p: processes,
-      r: resources,
-      avail: initialAvail,
-      alloc: allocation,
-      max: maximum,
-      totalRes: totalResources,
-      allocData: allocation,
-      requestData: needMatrix,
+      targetTab: result.systemState === 'DEADLOCKED' ? 'detection' : 'avoidance', // Decides which tab to open
+      p: processes,          // Number of processes
+      r: resources,          // Number of resource types
+      avail: initialAvail,   // Available resources for Banker's Tab
+      alloc: allocation,     // Allocation matrix
+      max: maximum,          // Maximum matrix
+      totalRes: totalResources, // Total resource capacities
+      allocData: allocation,    // Alias used by Detection Tab
+      requestData: needMatrix,  // Need matrix used as current requests in Detection Tab
     }));
 
-    navigate('/quick-mode');
+    navigate('/quick-mode'); // Navigate the user to the Quick Mode page
   };
 
-  const [processes, setProcesses] = useState(3);
-  const [resources, setResources] = useState(3);
-  const [totalResources, setTotalResources] = useState(['', '', '']);
-  const [allocation, setAllocation] = useState(emptyMatrix(3, 3));
-  const [maximum, setMaximum] = useState(emptyMatrix(3, 3));
-  const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState([]);
+  const [processes, setProcesses] = useState(3);           // Number of processes (default 3)
+  const [resources, setResources] = useState(3);           // Number of resource types (default 3)
+  const [totalResources, setTotalResources] = useState(['', '', '']); // Total capacity per resource
+  const [allocation, setAllocation] = useState(emptyMatrix(3, 3));    // Current allocation matrix
+  const [maximum, setMaximum] = useState(emptyMatrix(3, 3));          // Maximum demand matrix
+  const [result, setResult] = useState(null);              // Stores the full analysis output
+  const [loading, setLoading] = useState(false);           // Controls loading spinner on Analyze button
+  const [errors, setErrors] = useState([]);                // Stores validation error messages
 
-  // Update dimensions
+  // Called when user changes the number of processes or resources
+  // Resizes all matrices while preserving any values already entered in existing cells
   const updateDimensions = (p, r) => {
-    const np = Math.max(1, Math.min(20, Number(p) || 1));
-    const nr = Math.max(1, Math.min(20, Number(r) || 1));
-    setProcesses(np);
-    setResources(nr);
+    const np = Math.max(1, Math.min(20, Number(p) || 1)); // Clamp processes between 1–20
+    const nr = Math.max(1, Math.min(20, Number(r) || 1)); // Clamp resources between 1–20
+    setProcesses(np); // Update process count state
+    setResources(nr);  // Update resource count state
+    // Resize Total Resources array — copy existing values, fill new slots with empty string
     setTotalResources(prev => {
       const arr = Array(nr).fill('');
       for (let i = 0; i < Math.min(prev.length, nr); i++) arr[i] = prev[i];
       return arr;
     });
+    // Resize Allocation matrix — preserve existing cell values within the new bounds
     setAllocation(prev => {
       const m = emptyMatrix(np, nr);
       for (let i = 0; i < Math.min(prev.length, np); i++)
         for (let j = 0; j < Math.min(prev[0]?.length || 0, nr); j++) m[i][j] = prev[i][j] ?? '';
       return m;
     });
+    // Resize Maximum matrix — same preservation logic as Allocation
     setMaximum(prev => {
       const m = emptyMatrix(np, nr);
       for (let i = 0; i < Math.min(prev.length, np); i++)
@@ -130,51 +146,55 @@ export default function SmartMode() {
     },
   ];
 
+  // Maps each example tag to its Tailwind badge color classes
   const TAG_COLOR = { Safe: 'text-success bg-success/10 border-success/30', Unsafe: 'text-warning bg-warning/10 border-warning/30', Deadlock: 'text-danger bg-danger/10 border-danger/30' };
 
+  // Picks a random example from all groups and populates all form states
   const loadRandomExample = () => {
-    const allItems = EXAMPLES.flatMap(group => group.items);
-    const randomEx = allItems[Math.floor(Math.random() * allItems.length)];
-    setProcesses(randomEx.p); setResources(randomEx.r);
-    setTotalResources(randomEx.total);
-    setAllocation(randomEx.alloc);
-    setMaximum(randomEx.max);
-    setResult(null); setErrors([]);
-    toast.success(`Loaded: ${randomEx.label}`);
+    const allItems = EXAMPLES.flatMap(group => group.items); // Flatten all groups into one array
+    const randomEx = allItems[Math.floor(Math.random() * allItems.length)]; // Pick random entry
+    setProcesses(randomEx.p); setResources(randomEx.r); // Set matrix dimensions
+    setTotalResources(randomEx.total); // Set total resource capacities
+    setAllocation(randomEx.alloc);     // Set allocation matrix
+    setMaximum(randomEx.max);          // Set maximum demand matrix
+    setResult(null); setErrors([]);    // Clear any existing results or errors
+    toast.success(`Loaded: ${randomEx.label}`); // Confirm which example was loaded
   };
 
-  // Run analysis
+  // Main analysis function — wrapped in useCallback to avoid unnecessary re-creation
   const analyze = useCallback(() => {
-    setLoading(true);
-    setErrors([]);
-    setResult(null);
+    setLoading(true);  // Show loading spinner on Analyze button
+    setErrors([]);     // Clear previous validation errors
+    setResult(null);   // Clear previous results
 
+    // setTimeout adds a brief 800ms delay so the loading animation is visible before results appear
     setTimeout(() => {
-      const res = runSmartAnalysis({ processes, resources, totalResources, allocation, maximum });
+      const res = runSmartAnalysis({ processes, resources, totalResources, allocation, maximum }); // Run all algorithms
       if (!res.valid) {
-        setErrors(res.errors);
-        toast.error('Validation failed. Please fix errors.');
+        setErrors(res.errors); // Display validation error list in the form
+        toast.error('Validation failed. Please fix errors.'); // Show error toast
       } else {
-        setResult(res);
-        addAnalysis({
-          systemState: res.systemState,
-          timestamp: res.timestamp,
-          processes,
-          resources,
+        setResult(res); // Store full analysis result for rendering
+        addAnalysis({   // Record this analysis run to the global history/stats context
+          systemState: res.systemState, // 'SAFE' | 'UNSAFE' | 'DEADLOCKED'
+          timestamp: res.timestamp,     // ISO timestamp of when this ran
+          processes,                    // Process count for history display
+          resources,                    // Resource count for history display
         });
         const stateMsg = { SAFE: '✅ Safe State', UNSAFE: '⚠️ Unsafe State', DEADLOCKED: '🔴 Deadlocked' };
-        toast.success(stateMsg[res.systemState] || 'Analysis complete');
+        toast.success(stateMsg[res.systemState] || 'Analysis complete'); // Show state result as toast
       }
-      setLoading(false);
+      setLoading(false); // Hide loading spinner
     }, 800);
-  }, [processes, resources, totalResources, allocation, maximum, addAnalysis]);
+  }, [processes, resources, totalResources, allocation, maximum, addAnalysis]); // Re-create only when inputs change
 
+  // Clears all inputs and results back to a blank initial state
   const reset = () => {
-    setResult(null);
-    setErrors([]);
-    setTotalResources(Array(resources).fill(''));
-    setAllocation(emptyMatrix(processes, resources));
-    setMaximum(emptyMatrix(processes, resources));
+    setResult(null);    // Hide results panel
+    setErrors([]);      // Clear validation errors
+    setTotalResources(Array(resources).fill('')); // Reset total resources to empty strings
+    setAllocation(emptyMatrix(processes, resources)); // Reset allocation matrix to empty
+    setMaximum(emptyMatrix(processes, resources));    // Reset maximum matrix to empty
   };
 
   return (
@@ -291,29 +311,33 @@ export default function SmartMode() {
 }
 
 // ─── Results Component ──────────────────────────────────────────────────────
+// Receives analysis result and renders all visual output panels
 function SmartResults({ result, processes, resources, handleNavigate }) {
+  // Maps each system state to its display color, icon, label, and glow CSS class
   const stateConfig = {
     SAFE: { color: 'success', icon: HiOutlineShieldCheck, label: 'SAFE', glow: 'glow-success' },
     UNSAFE: { color: 'warning', icon: HiOutlineExclamation, label: 'UNSAFE', glow: 'glow-warning' },
     DEADLOCKED: { color: 'danger', icon: HiOutlineBan, label: 'DEADLOCKED', glow: 'glow-danger' },
   };
-  const sc = stateConfig[result.systemState];
+  const sc = stateConfig[result.systemState]; // Shortcut to the active state's display config
 
-  // Build React Flow nodes/edges for dependency graph
-  const flowNodes = [];
-  const flowEdges = [];
-  const cycleProcesses = new Set();
+  // ── Build React Flow Wait-For Graph nodes and edges ──
+  const flowNodes = []; // Array of React Flow node objects
+  const flowEdges = []; // Array of React Flow edge objects
+  const cycleProcesses = new Set(); // Tracks which process indices are part of a deadlock cycle
   if (result.circularDep.cycles) {
+    // Collect all process indices from every detected cycle into a Set for O(1) lookup
     result.circularDep.cycles.forEach(cycle => cycle.forEach(p => cycleProcesses.add(p)));
   }
   for (let i = 0; i < processes; i++) {
     flowNodes.push({
-      id: `p${i}`,
-      data: { label: `P${i}` },
+      id: `p${i}`,             // Unique ID for React Flow to identify this node
+      data: { label: `P${i}` }, // Label displayed inside the node
+      // Position nodes in a circle using polar coordinates: x = cx + r*cos(θ), y = cy + r*sin(θ)
       position: { x: 150 + 200 * Math.cos((2 * Math.PI * i) / processes), y: 150 + 150 * Math.sin((2 * Math.PI * i) / processes) },
       style: {
-        background: cycleProcesses.has(i) ? 'rgba(239, 68, 68, 0.3)' : 'rgba(99, 102, 241, 0.3)',
-        border: cycleProcesses.has(i) ? '2px solid #ef4444' : '2px solid #6366f1',
+        background: cycleProcesses.has(i) ? 'rgba(239, 68, 68, 0.3)' : 'rgba(99, 102, 241, 0.3)', // Red if deadlocked, indigo if safe
+        border: cycleProcesses.has(i) ? '2px solid #ef4444' : '2px solid #6366f1',                // Red border if in cycle
         borderRadius: '12px',
         padding: '10px 20px',
         color: '#e2e8f0',
@@ -322,34 +346,35 @@ function SmartResults({ result, processes, resources, handleNavigate }) {
       },
     });
   }
-  // Add edges from waiting dependencies
-  const addedEdges = new Set();
+  // Build edges from the waiting dependency list — one arrow per unique process-to-process wait
+  const addedEdges = new Set(); // Prevents duplicate edges between the same two processes
   result.waiting.dependencies.forEach(dep => {
-    const from = dep.waiting.replace('P', '');
-    const to = dep.waitingFor.replace('P', '');
-    const edgeId = `${from}-${to}`;
-    if (!addedEdges.has(edgeId)) {
+    const from = dep.waiting.replace('P', '');    // Strip 'P' prefix to get numeric index
+    const to = dep.waitingFor.replace('P', '');   // Strip 'P' prefix to get numeric index
+    const edgeId = `${from}-${to}`;              // Unique edge identifier
+    if (!addedEdges.has(edgeId)) {               // Only add each unique directed edge once
       addedEdges.add(edgeId);
-      const inCycle = cycleProcesses.has(Number(from)) && cycleProcesses.has(Number(to));
+      const inCycle = cycleProcesses.has(Number(from)) && cycleProcesses.has(Number(to)); // True if both endpoints are in a cycle
       flowEdges.push({
         id: edgeId,
-        source: `p${from}`,
-        target: `p${to}`,
-        animated: inCycle,
-        style: { stroke: inCycle ? '#ef4444' : '#6366f1', strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: inCycle ? '#ef4444' : '#6366f1' },
-        label: dep.resource,
-        labelStyle: { fill: '#94a3b8', fontSize: 11 },
-        labelBgStyle: { fill: '#1e1b4b', fillOpacity: 0.8 },
+        source: `p${from}`,  // Source process node
+        target: `p${to}`,    // Target process node
+        animated: inCycle,   // Animate the edge if it's part of a deadlock cycle
+        style: { stroke: inCycle ? '#ef4444' : '#6366f1', strokeWidth: 2 }, // Red for cycle edges, indigo otherwise
+        markerEnd: { type: MarkerType.ArrowClosed, color: inCycle ? '#ef4444' : '#6366f1' }, // Arrow head color
+        label: dep.resource,                              // Show resource name as edge label
+        labelStyle: { fill: '#94a3b8', fontSize: 11 },   // Muted label text style
+        labelBgStyle: { fill: '#1e1b4b', fillOpacity: 0.8 }, // Dark background for label readability
       });
     }
   });
 
+  // Prepares the four Coffman condition items for rendering as cards
   const conditionItems = [
-    { key: 'mutualExclusion', icon: FaLock, label: 'Mutual Exclusion', present: result.conditions.mutualExclusion },
-    { key: 'holdAndWait', icon: FaHandPaper, label: 'Hold and Wait', present: result.conditions.holdAndWait },
-    { key: 'noPreemption', icon: FaBan, label: 'No Preemption', present: result.conditions.noPreemption },
-    { key: 'circularWait', icon: FaSyncAlt, label: 'Circular Wait', present: result.conditions.circularWait },
+    { key: 'mutualExclusion', icon: FaLock,      label: 'Mutual Exclusion', present: result.conditions.mutualExclusion },
+    { key: 'holdAndWait',     icon: FaHandPaper, label: 'Hold and Wait',    present: result.conditions.holdAndWait },
+    { key: 'noPreemption',    icon: FaBan,       label: 'No Preemption',    present: result.conditions.noPreemption },
+    { key: 'circularWait',    icon: FaSyncAlt,   label: 'Circular Wait',    present: result.conditions.circularWait },
   ];
 
   return (
